@@ -214,7 +214,9 @@ jobs:
             [ -f "package-lock.json" ] && git add package-lock.json || true
             [ -f "pnpm-lock.yaml" ] && git add pnpm-lock.yaml || true
             [ -f "yarn.lock" ] && git add yarn.lock || true
-            git commit -m "chore: Update viem to $LATEST_VIEM
+            
+            # Create commit message
+            COMMIT_MSG="chore: Update viem to ${LATEST_VIEM}
 
 This update ensures new networks added to contracts are available.
 
@@ -222,6 +224,8 @@ New networks detected:
 $(echo '${{ env.added_networks }}' | jq -r '.[]' | sed 's/^/- /')
 
 Related commit: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}"
+            
+            git commit -m "$COMMIT_MSG"
             
             # Push branch
             git push origin "$BRANCH_NAME" || {
