@@ -253,45 +253,30 @@ jobs:
               body: ("This PR updates viem to version \($viem) to ensure new networks added to contracts are available.\n\n## New Networks Detected\n\nThe following networks were added to [contracts repository](https://github.com/\($repo)):\n\n\($networks)\n\n## Changes\n\n- Updated viem from \($current) to \($viem)\n\n## Related\n\n- Source commit: [\($sha)](https://github.com/\($repo)/commit/\($sha))\n\n## Verification\n\nAfter merging this PR, please verify that the new networks are available by checking:\n1. Network selection dropdown includes the new networks\n2. Contract inspection works correctly for contracts deployed on these networks\n\n---\n\n*This PR was automatically created by automated workflow*")
             }' | jq -r '.body')
           
-          # Create PR using GitHub CLI or API
-          if command -v gh &> /dev/null; then
-            # Save token and unset GITHUB_TOKEN to avoid conflicts with gh CLI
-            GH_TOKEN_VALUE="${GITHUB_TOKEN}"
-            unset GITHUB_TOKEN
-            echo "${GH_TOKEN_VALUE}" | gh auth login --with-token
-            gh pr create \
-              --repo ${TARGET_REPO} \
-              --title "chore: Update viem to ${{ env.LATEST_VIEM }} [TEST]" \
-              --body "$PR_BODY" \
-              --base main \
-              --head "${{ env.BRANCH_NAME }}" \
-              --draft # TEMPORARY: Create as draft for testing
+          # Create PR using GitHub API (more reliable, no additional scopes required)
+          PR_RESPONSE=$(curl -s -X POST \
+            -H "Authorization: token ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${TARGET_REPO}/pulls" \
+            -d "{
+              \"title\": \"chore: Update viem to ${{ env.LATEST_VIEM }} [TEST]\",
+              \"body\": $(echo "$PR_BODY" | jq -Rs .),
+              \"head\": \"${{ env.BRANCH_NAME }}\",
+              \"base\": \"main\",
+              \"draft\": true
+            }")
+          
+          PR_URL=$(echo "$PR_RESPONSE" | jq -r '.html_url // empty')
+          PR_NUMBER=$(echo "$PR_RESPONSE" | jq -r '.number // empty')
+          
+          if [ -n "$PR_URL" ] && [ "$PR_URL" != "null" ]; then
+            echo "✅ PR created successfully: $PR_URL"
+            echo "PR_URL=$PR_URL" >> $GITHUB_ENV
+            echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
           else
-            # Fallback to API
-            PR_RESPONSE=$(curl -s -X POST \
-              -H "Authorization: token ${GITHUB_TOKEN}" \
-              -H "Accept: application/vnd.github.v3+json" \
-              "https://api.github.com/repos/${TARGET_REPO}/pulls" \
-              -d "{
-                \"title\": \"chore: Update viem to ${{ env.LATEST_VIEM }} [TEST]\",
-                \"body\": $(echo "$PR_BODY" | jq -Rs .),
-                \"head\": \"${{ env.BRANCH_NAME }}\",
-                \"base\": \"main\",
-                \"draft\": true
-              }")
-            
-            PR_URL=$(echo "$PR_RESPONSE" | jq -r '.html_url // empty')
-            PR_NUMBER=$(echo "$PR_RESPONSE" | jq -r '.number // empty')
-            
-            if [ -n "$PR_URL" ] && [ "$PR_URL" != "null" ]; then
-              echo "✅ PR created successfully: $PR_URL"
-              echo "PR_URL=$PR_URL" >> $GITHUB_ENV
-              echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
-            else
-              echo "❌ Failed to create PR"
-              echo "Response: $PR_RESPONSE"
-              exit 1
-            fi
+            echo "❌ Failed to create PR"
+            echo "Response: $PR_RESPONSE"
+            exit 1
           fi
 
       - name: Comment on existing PR
