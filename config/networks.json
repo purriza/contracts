@@ -1439,5 +1439,25 @@
     "deployedWithEvmVersion": "london",
     "deployedWithSolcVersion": "0.8.17",
     "create3Factory": "0x0000000000000000000000000000000000000000"
+  },
+  "brandnewnetwork": {
+    "name": "brandnewnetwork",
+    "chainId": 888888,
+    "nativeAddress": "0x0000000000000000000000000000000000000000",
+    "nativeCurrency": "BNN",
+    "wrappedNativeAddress": "0x0000000000000000000000000000000000000000",
+    "status": "active",
+    "type": "testnet",
+    "rpcUrl": "https://brandnewnetwork-rpc.example.com",
+    "verificationType": "etherscan",
+    "explorerUrl": "https://brandnewnetwork-explorer.example.com",
+    "explorerApiUrl": "https://brandnewnetwork-api.example.com",
+    "multicallAddress": "0x0000000000000000000000000000000000000000",
+    "safeAddress": "0x0000000000000000000000000000000000000000",
+    "gasZipChainId": 0,
+    "isZkEVM": false,
+    "deployedWithEvmVersion": "london",
+    "deployedWithSolcVersion": "0.8.17",
+    "create3Factory": "0x0000000000000000000000000000000000000000"
   }
 }
