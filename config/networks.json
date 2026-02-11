@@ -1424,7 +1424,7 @@
     "name": "testnetwork2026",
     "chainId": 999997,
     "nativeAddress": "0x0000000000000000000000000000000000000000",
-    "nativeCurrency": "ETH",
+    "nativeCurrency": "TEST",
     "wrappedNativeAddress": "0x0000000000000000000000000000000000000000",
     "status": "active",
     "type": "testnet",
