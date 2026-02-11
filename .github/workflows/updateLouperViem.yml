@@ -5,7 +5,7 @@ name: Update Louper Viem
 # - clones target repo, updates viem to latest version, and creates PR
 # - ensures new networks become available in target repository after deployment
 # - runs on push to main branch (after PR merge) or when networks.json changes
-# - Configure TARGET_REPO secret to specify target repository (format: owner/repo)
+# - Configure TARGET_REPO secret to specify target repository (format: owner/repo, e.g., purriza/louper)
 
 on:
   push:
@@ -110,6 +110,8 @@ jobs:
 
       - name: Checkout target repository
         if: env.SKIP_UPDATE != 'true'
+        # TARGET_REPO secret must be in format: owner/repo (e.g., purriza/louper)
+        # Do not use full URLs like https://github.com/owner/repo
         uses: actions/checkout@v4
         with:
           repository: ${{ secrets.TARGET_REPO || 'mark3labs/louper' }}
