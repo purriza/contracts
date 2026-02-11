@@ -15,10 +15,10 @@ on:
     paths:
       - 'config/networks.json'
   pull_request:
-    types: [opened, synchronize, closed] # TEMPORARY: Added opened/synchronize for testing
+    types: [opened, synchronize, closed] # TEMPORARY: opened/synchronize for testing - remove in production, keep only 'closed'
     paths:
       - 'config/networks.json'
-  workflow_dispatch:
+  workflow_dispatch: # Allows manual trigger for testing
 
 permissions:
   contents: read # required to read repository contents
