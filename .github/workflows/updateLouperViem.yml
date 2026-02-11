@@ -255,7 +255,10 @@ jobs:
           
           # Create PR using GitHub CLI or API
           if command -v gh &> /dev/null; then
-            echo "$GITHUB_TOKEN" | gh auth login --with-token
+            # Save token and unset GITHUB_TOKEN to avoid conflicts with gh CLI
+            GH_TOKEN_VALUE="${GITHUB_TOKEN}"
+            unset GITHUB_TOKEN
+            echo "${GH_TOKEN_VALUE}" | gh auth login --with-token
             gh pr create \
               --repo ${TARGET_REPO} \
               --title "chore: Update viem to ${{ env.LATEST_VIEM }} [TEST]" \
