@@ -215,17 +215,12 @@ jobs:
             [ -f "pnpm-lock.yaml" ] && git add pnpm-lock.yaml || true
             [ -f "yarn.lock" ] && git add yarn.lock || true
             
-            # Create commit message
-            COMMIT_MSG="chore: Update viem to ${LATEST_VIEM}
-
-This update ensures new networks added to contracts are available.
-
-New networks detected:
-$(echo '${{ env.added_networks }}' | jq -r '.[]' | sed 's/^/- /')
-
-Related commit: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}"
-            
-            git commit -m "$COMMIT_MSG"
+            # Create commit message with HEREDOC
+            git commit -m "chore: Update viem to ${LATEST_VIEM}" \
+              -m "This update ensures new networks added to contracts are available." \
+              -m "New networks detected:" \
+              -m "$(echo '${{ env.added_networks }}' | jq -r '.[]' | sed 's/^/- /')" \
+              -m "Related commit: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}"
             
             # Push branch
             git push origin "$BRANCH_NAME" || {
