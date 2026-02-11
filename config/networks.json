@@ -1419,5 +1419,25 @@
     "deployedWithEvmVersion": "london",
     "deployedWithSolcVersion": "0.8.17",
     "create3Factory": "0x0000000000000000000000000000000000000000"
+  },
+  "testnetwork2026": {
+    "name": "testnetwork2026",
+    "chainId": 999997,
+    "nativeAddress": "0x0000000000000000000000000000000000000000",
+    "nativeCurrency": "ETH",
+    "wrappedNativeAddress": "0x0000000000000000000000000000000000000000",
+    "status": "active",
+    "type": "testnet",
+    "rpcUrl": "https://testnetwork-2026-rpc.example.com",
+    "verificationType": "etherscan",
+    "explorerUrl": "https://testnetwork-2026-explorer.example.com",
+    "explorerApiUrl": "https://testnetwork-2026-api.example.com",
+    "multicallAddress": "0x0000000000000000000000000000000000000000",
+    "safeAddress": "0x0000000000000000000000000000000000000000",
+    "gasZipChainId": 0,
+    "isZkEVM": false,
+    "deployedWithEvmVersion": "london",
+    "deployedWithSolcVersion": "0.8.17",
+    "create3Factory": "0x0000000000000000000000000000000000000000"
   }
 }
