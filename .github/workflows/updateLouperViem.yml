@@ -129,13 +129,17 @@ jobs:
           cd target-repo
           
           # Check for existing open PRs with our title pattern
-          EXISTING_PR=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+          PR_DATA=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
             "https://api.github.com/repos/${TARGET_REPO}/pulls?state=open" | \
-            jq -r '.[] | select(.title | startswith("chore: Update viem")) | .number' | head -1)
+            jq -r '.[] | select(.title | startswith("chore: Update viem")) | {number: .number, head: .head.ref} | @json' | head -1)
           
-          if [ -n "$EXISTING_PR" ] && [ "$EXISTING_PR" != "null" ]; then
-            echo "Found existing PR: #$EXISTING_PR"
+          if [ -n "$PR_DATA" ] && [ "$PR_DATA" != "null" ]; then
+            EXISTING_PR=$(echo "$PR_DATA" | jq -r '.number')
+            EXISTING_BRANCH=$(echo "$PR_DATA" | jq -r '.head')
+            echo "Found existing PR: #$EXISTING_PR on branch: $EXISTING_BRANCH"
             echo "EXISTING_PR_NUMBER=$EXISTING_PR" >> $GITHUB_ENV
+            echo "EXISTING_BRANCH=$EXISTING_BRANCH" >> $GITHUB_ENV
             echo "PR_EXISTS=true" >> $GITHUB_ENV
           else
             echo "No existing PR found"
@@ -143,7 +147,7 @@ jobs:
           fi
 
       - name: Update viem to latest version
-        if: env.SKIP_UPDATE != 'true' && env.PR_EXISTS != 'true'
+        if: env.SKIP_UPDATE != 'true'
         id: update-viem
         env:
           TARGET_REPO: ${{ secrets.TARGET_REPO || 'mark3labs/louper' }}
@@ -172,12 +176,32 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             
-            # Create branch name with timestamp
-            BRANCH_NAME="chore/update-viem-$(date +%Y%m%d-%H%M%S)"
+            # Use existing branch if PR exists, otherwise use fixed branch name
+            if [ "${{ env.PR_EXISTS }}" == "true" ] && [ -n "${{ env.EXISTING_BRANCH }}" ]; then
+              BRANCH_NAME="${{ env.EXISTING_BRANCH }}"
+              echo "Reusing existing branch from PR: $BRANCH_NAME"
+            else
+              BRANCH_NAME="chore/update-viem"
+              echo "Using fixed branch name: $BRANCH_NAME"
+            fi
             echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
             
-            # Checkout new branch
-            git checkout -b "$BRANCH_NAME"
+            # Check if branch already exists locally or remotely
+            if git show-ref --verify --quiet refs/heads/"$BRANCH_NAME" 2>/dev/null || \
+               git ls-remote --heads origin "$BRANCH_NAME" | grep -q "$BRANCH_NAME"; then
+              echo "Branch $BRANCH_NAME already exists, checking out and updating..."
+              # Fetch the branch if it exists remotely
+              git fetch origin "$BRANCH_NAME" 2>/dev/null || true
+              # Checkout the branch (create local tracking if needed)
+              git checkout -b "$BRANCH_NAME" "origin/$BRANCH_NAME" 2>/dev/null || git checkout "$BRANCH_NAME"
+              # Reset to default branch to ensure we're up to date with base
+              DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")
+              git reset --hard "origin/${DEFAULT_BRANCH}"
+            else
+              echo "Creating new branch $BRANCH_NAME"
+              DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")
+              git checkout -b "$BRANCH_NAME" "origin/${DEFAULT_BRANCH}"
+            fi
             
             # Update viem using npm-check-updates or npm install
             # Try npm-check-updates first, fallback to manual update
@@ -224,11 +248,20 @@ jobs:
               -m "$(echo '${{ env.added_networks }}' | jq -r '.[]' | sed 's/^/- /')" \
               -m "Related commit: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}"
             
-            # Push branch
-            git push origin "$BRANCH_NAME" || {
-              echo "❌ Failed to push branch. Checking if branch already exists..."
-              exit 1
-            }
+            # Push branch (use force if updating existing branch)
+            if git ls-remote --heads origin "$BRANCH_NAME" | grep -q "$BRANCH_NAME"; then
+              echo "Branch exists remotely, using force push to update..."
+              git push --force origin "$BRANCH_NAME" || {
+                echo "❌ Failed to force push branch"
+                exit 1
+              }
+            else
+              echo "Pushing new branch..."
+              git push origin "$BRANCH_NAME" || {
+                echo "❌ Failed to push branch"
+                exit 1
+              }
+            fi
           fi
 
       - name: Create Pull Request in target repository
