@@ -237,39 +237,19 @@ jobs:
         run: |
           cd target-repo
           
-          # Prepare PR body with network details
-          NETWORK_LIST=$(echo '${{ env.added_networks }}' | jq -r '.[]' | sed 's/^/- /' | tr '\n' '\n')
-          NETWORK_DETAILS=$(echo '${{ env.network_details }}' | jq -r '.[] | "- **\(.name)**: Chain ID \(.chainId)"' | tr '\n' '\n')
+          # Prepare PR body using jq to safely build JSON
+          NETWORK_DETAILS=$(echo '${{ env.network_details }}' | jq -r '.[] | "- **\(.name)**: Chain ID \(.chainId)"')
           
-          PR_BODY=$(cat <<EOF
-This PR updates \`viem\` to the latest version (\`${{ env.LATEST_VIEM }}\`) to ensure new networks added to contracts are available.
-
-## New Networks Detected
-
-The following networks were added to [contracts repository](https://github.com/${{ github.repository }}):
-
-$NETWORK_DETAILS
-
-## Changes
-
-- Updated \`viem\` from \`${{ env.CURRENT_VIEM }}\` to \`${{ env.LATEST_VIEM }}\`
-
-## Related
-
-- Source commit: [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
-$([ -n "${{ github.event.pull_request.html_url }}" ] && echo "- Source PR: ${{ github.event.pull_request.html_url }}")
-
-## Verification
-
-After merging this PR, please verify that the new networks are available by checking:
-1. Network selection dropdown includes the new networks
-2. Contract inspection works correctly for contracts deployed on these networks
-
----
-
-*This PR was automatically created by [workflow](https://github.com/${{ github.repository }}/actions/workflows/updateLouperViem.yml)*
-EOF
-)
+          PR_BODY=$(jq -n \
+            --arg viem "${{ env.LATEST_VIEM }}" \
+            --arg current "${{ env.CURRENT_VIEM }}" \
+            --arg repo "${{ github.repository }}" \
+            --arg sha "${{ github.sha }}" \
+            --arg networks "${NETWORK_DETAILS}" \
+            '{
+              title: "Update viem",
+              body: ("This PR updates viem to version \($viem) to ensure new networks added to contracts are available.\n\n## New Networks Detected\n\nThe following networks were added to [contracts repository](https://github.com/\($repo)):\n\n\($networks)\n\n## Changes\n\n- Updated viem from \($current) to \($viem)\n\n## Related\n\n- Source commit: [\($sha)](https://github.com/\($repo)/commit/\($sha))\n\n## Verification\n\nAfter merging this PR, please verify that the new networks are available by checking:\n1. Network selection dropdown includes the new networks\n2. Contract inspection works correctly for contracts deployed on these networks\n\n---\n\n*This PR was automatically created by automated workflow*")
+            }' | jq -r '.body')
           
           # Create PR using GitHub CLI or API
           if command -v gh &> /dev/null; then
@@ -315,25 +295,14 @@ EOF
           GITHUB_TOKEN: ${{ secrets.GIT_ACTIONS_BOT_PAT_CLASSIC }}
           TARGET_REPO: ${{ secrets.TARGET_REPO || 'mark3labs/louper' }}
         run: |
-          # Add comment to existing PR about new networks
-          NETWORK_DETAILS=$(echo '${{ env.network_details }}' | jq -r '.[] | "- **\(.name)**: Chain ID \(.chainId)"' | tr '\n' '\n')
+          # Add comment to existing PR about new networks using jq
+          NETWORK_DETAILS=$(echo '${{ env.network_details }}' | jq -r '.[] | "- **\(.name)**: Chain ID \(.chainId)"')
           
-          COMMENT_BODY=$(cat <<EOF
-## New Networks Detected
-
-The following networks were added to [contracts repository](https://github.com/${{ github.repository }}):
-
-$NETWORK_DETAILS
-
-This PR should already include support for these networks once viem is updated.
-
-Related commit: [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
-
----
-
-*This comment was automatically added by [workflow](https://github.com/${{ github.repository }}/actions/workflows/updateLouperViem.yml)*
-EOF
-)
+          COMMENT_BODY=$(jq -n \
+            --arg repo "${{ github.repository }}" \
+            --arg sha "${{ github.sha }}" \
+            --arg networks "${NETWORK_DETAILS}" \
+            '{body: ("## New Networks Detected\n\nThe following networks were added to [contracts repository](https://github.com/\($repo)):\n\n\($networks)\n\nThis PR should already include support for these networks once viem is updated.\n\nRelated commit: [\($sha)](https://github.com/\($repo)/commit/\($sha))\n\n---\n\n*This comment was automatically added by automated workflow*")}' | jq -r '.body')
           
           curl -s -X POST \
             -H "Authorization: token ${GITHUB_TOKEN}" \
