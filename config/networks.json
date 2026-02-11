@@ -1559,5 +1559,25 @@
     "deployedWithEvmVersion": "london",
     "deployedWithSolcVersion": "0.8.17",
     "create3Factory": "0x0000000000000000000000000000000000000000"
+  },
+  "loupertest6": {
+    "name": "loupertest6",
+    "chainId": 777772,
+    "nativeAddress": "0x0000000000000000000000000000000000000000",
+    "nativeCurrency": "ETH",
+    "wrappedNativeAddress": "0x0000000000000000000000000000000000000000",
+    "status": "active",
+    "type": "testnet",
+    "rpcUrl": "https://loupertest6-rpc.example.com",
+    "verificationType": "etherscan",
+    "explorerUrl": "https://loupertest6-explorer.example.com",
+    "explorerApiUrl": "https://loupertest6-api.example.com",
+    "multicallAddress": "0x0000000000000000000000000000000000000000",
+    "safeAddress": "0x0000000000000000000000000000000000000000",
+    "gasZipChainId": 0,
+    "isZkEVM": false,
+    "deployedWithEvmVersion": "london",
+    "deployedWithSolcVersion": "0.8.17",
+    "create3Factory": "0x0000000000000000000000000000000000000000"
   }
 }

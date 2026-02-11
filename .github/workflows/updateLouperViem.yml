@@ -5,7 +5,7 @@ name: Update Louper Viem
 # - clones target repo, updates viem to latest version, and creates PR
 # - ensures new networks become available in target repository after deployment
 # - runs on push to main branch (after PR merge) or when networks.json changes
-# - Configure TARGET_REPO secret to specify target repository (format: owner/repo, e.g., purriza/louper)
+# - Target repository is hardcoded to purriza/louper
 
 on:
   push:
@@ -110,11 +110,9 @@ jobs:
 
       - name: Checkout target repository
         if: env.SKIP_UPDATE != 'true'
-        # TARGET_REPO secret must be in format: owner/repo (e.g., purriza/louper)
-        # Do not use full URLs like https://github.com/owner/repo
         uses: actions/checkout@v4
         with:
-          repository: ${{ secrets.TARGET_REPO || 'mark3labs/louper' }}
+          repository: purriza/louper
           path: target-repo
           token: ${{ secrets.GIT_ACTIONS_BOT_PAT_CLASSIC }}
           fetch-depth: 0
@@ -124,14 +122,13 @@ jobs:
         id: check-existing-pr
         env:
           GITHUB_TOKEN: ${{ secrets.GIT_ACTIONS_BOT_PAT_CLASSIC }}
-          TARGET_REPO: ${{ secrets.TARGET_REPO || 'mark3labs/louper' }}
         run: |
           cd target-repo
           
           # Check for existing open PRs with our title pattern
           PR_DATA=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
             -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${TARGET_REPO}/pulls?state=open" | \
+            "https://api.github.com/repos/purriza/louper/pulls?state=open" | \
             jq -r '.[] | select(.title | startswith("chore: Update viem")) | {number: .number, head: .head.ref} | @json' | head -1)
           
           if [ -n "$PR_DATA" ] && [ "$PR_DATA" != "null" ]; then
@@ -149,8 +146,6 @@ jobs:
       - name: Update viem to latest version
         if: env.SKIP_UPDATE != 'true'
         id: update-viem
-        env:
-          TARGET_REPO: ${{ secrets.TARGET_REPO || 'mark3labs/louper' }}
         run: |
           cd target-repo
           
@@ -268,14 +263,13 @@ jobs:
         if: env.SKIP_UPDATE != 'true' && env.PR_EXISTS != 'true' && env.UPDATE_NEEDED == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GIT_ACTIONS_BOT_PAT_CLASSIC }}
-          TARGET_REPO: ${{ secrets.TARGET_REPO || 'mark3labs/louper' }}
         run: |
           cd target-repo
           
           # Detect default branch of target repository
           REPO_INFO=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
             -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${TARGET_REPO}")
+            "https://api.github.com/repos/purriza/louper")
           
           DEFAULT_BRANCH=$(echo "$REPO_INFO" | jq -r '.default_branch // "main"')
           echo "Detected default branch: ${DEFAULT_BRANCH}"
@@ -298,7 +292,7 @@ jobs:
           PR_RESPONSE=$(curl -s -X POST \
             -H "Authorization: token ${GITHUB_TOKEN}" \
             -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${TARGET_REPO}/pulls" \
+            "https://api.github.com/repos/purriza/louper/pulls" \
             -d "{
               \"title\": \"chore: Update viem to ${{ env.LATEST_VIEM }} [TEST]\",
               \"body\": $(echo "$PR_BODY" | jq -Rs .),
@@ -324,7 +318,6 @@ jobs:
         if: env.SKIP_UPDATE != 'true' && env.PR_EXISTS == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GIT_ACTIONS_BOT_PAT_CLASSIC }}
-          TARGET_REPO: ${{ secrets.TARGET_REPO || 'mark3labs/louper' }}
         run: |
           # Add comment to existing PR about new networks using jq
           NETWORK_DETAILS=$(echo '${{ env.network_details }}' | jq -r '.[] | "- **\(.name)**: Chain ID \(.chainId)"')
@@ -338,7 +331,7 @@ jobs:
           curl -s -X POST \
             -H "Authorization: token ${GITHUB_TOKEN}" \
             -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${TARGET_REPO}/issues/${{ env.EXISTING_PR_NUMBER }}/comments" \
+            "https://api.github.com/repos/purriza/louper/issues/${{ env.EXISTING_PR_NUMBER }}/comments" \
             -d "{\"body\": $(echo "$COMMENT_BODY" | jq -Rs .)}"
           
           echo "✅ Comment added to existing PR #${{ env.EXISTING_PR_NUMBER }}"
