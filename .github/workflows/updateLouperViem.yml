@@ -1,6 +1,6 @@
 name: Update Louper Viem
 
-# - automatically creates a PR in target repository when new networks are added
+# - Automatically creates a PR in target repository when new networks are added
 # - detects new networks by comparing config/networks.json with main branch
 # - clones target repo, updates viem to latest version, and creates PR
 # - ensures new networks become available in target repository after deployment
@@ -146,8 +146,20 @@ jobs:
       - name: Update viem to latest version
         if: env.SKIP_UPDATE != 'true'
         id: update-viem
+        env:
+          GITHUB_TOKEN: ${{ secrets.GIT_ACTIONS_BOT_PAT_CLASSIC }}
         run: |
           cd target-repo
+          
+          # Detect default branch using GitHub API
+          REPO_INFO=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/purriza/louper")
+          DEFAULT_BRANCH=$(echo "$REPO_INFO" | jq -r '.default_branch // "dev"')
+          echo "Default branch: ${DEFAULT_BRANCH}"
+          
+          # Ensure we have the default branch fetched
+          git fetch origin "${DEFAULT_BRANCH}" || git fetch origin
           
           # Get current viem version
           CURRENT_VIEM=$(jq -r '.dependencies.viem // .devDependencies.viem // "not found"' package.json)
@@ -181,20 +193,17 @@ jobs:
             fi
             echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
             
-            # Check if branch already exists locally or remotely
-            if git show-ref --verify --quiet refs/heads/"$BRANCH_NAME" 2>/dev/null || \
-               git ls-remote --heads origin "$BRANCH_NAME" | grep -q "$BRANCH_NAME"; then
-              echo "Branch $BRANCH_NAME already exists, checking out and updating..."
-              # Fetch the branch if it exists remotely
-              git fetch origin "$BRANCH_NAME" 2>/dev/null || true
-              # Checkout the branch (create local tracking if needed)
+            # Check if branch already exists remotely
+            if git ls-remote --heads origin "$BRANCH_NAME" | grep -q "$BRANCH_NAME"; then
+              echo "Branch $BRANCH_NAME already exists remotely, checking out and updating..."
+              # Fetch the branch
+              git fetch origin "$BRANCH_NAME"
+              # Checkout the branch
               git checkout -b "$BRANCH_NAME" "origin/$BRANCH_NAME" 2>/dev/null || git checkout "$BRANCH_NAME"
-              # Reset to default branch to ensure we're up to date with base
-              DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")
-              git reset --hard "origin/${DEFAULT_BRANCH}"
+              # Merge latest changes from default branch to keep it up to date
+              git merge "origin/${DEFAULT_BRANCH}" --no-edit || echo "Merge conflicts or already up to date"
             else
-              echo "Creating new branch $BRANCH_NAME"
-              DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")
+              echo "Creating new branch $BRANCH_NAME from ${DEFAULT_BRANCH}"
               git checkout -b "$BRANCH_NAME" "origin/${DEFAULT_BRANCH}"
             fi
             
