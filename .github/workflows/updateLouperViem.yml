@@ -153,11 +153,11 @@ jobs:
             
             if [ -z "$VIEM_EXISTS" ] || [ "$VIEM_EXISTS" == "null" ]; then
               echo "viem not found in package.json, adding it..."
-              npm install viem@${LATEST_VIEM} --save-exact
+              npm install viem@${LATEST_VIEM} --save-exact --legacy-peer-deps
             else
               echo "viem found in package.json (version: $VIEM_EXISTS), updating..."
               # Update viem using npm install (more reliable than npm-check-updates)
-              npm install viem@${LATEST_VIEM} --save-exact
+              npm install viem@${LATEST_VIEM} --save-exact --legacy-peer-deps
             fi
             
             # Install dependencies to update lock file
