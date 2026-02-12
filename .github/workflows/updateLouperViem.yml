@@ -8,14 +8,8 @@ name: Update Louper Viem
 # - Target repository is hardcoded to purriza/louper
 
 on:
-  push:
-    branches:
-      - main
-      - 'SMAR-104-Automate-Louper-support-when-adding-new-network-viem-update-PR' # TEMPORARY: For testing
-    paths:
-      - 'config/networks.json'
   pull_request:
-    types: [opened, synchronize, closed] # TEMPORARY: opened/synchronize for testing - remove in production, keep only 'closed'
+    types: [closed]
     paths:
       - 'config/networks.json'
   workflow_dispatch: # Allows manual trigger for testing
@@ -27,15 +21,8 @@ permissions:
 jobs:
   update-louper-viem:
     runs-on: ubuntu-latest
-    # TEMPORARY: Allow running on PR open/sync for testing (normally only runs on merge)
-    # In production, this should only run when PR is merged: github.event.pull_request.merged == true
-    if: |
-      github.event_name == 'push' || 
-      (github.event_name == 'pull_request' && (
-        github.event.pull_request.merged == true ||
-        github.event.action == 'opened' ||
-        github.event.action == 'synchronize'
-      ))
+    # Only run when PR is merged (closed + merged == true)
+    if: github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Checkout repository
@@ -48,32 +35,16 @@ jobs:
         run: |
           echo "Comparing config/networks.json with previous state..."
           
-          # For PR events, compare with base branch
-          # For push events, compare with previous commit
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            BASE_SHA="${{ github.event.pull_request.base.sha }}"
-            git fetch origin "$BASE_SHA" --depth=1 || echo "Could not fetch base SHA"
-            
-            if git show "$BASE_SHA:config/networks.json" > /dev/null 2>&1; then
-              OLD_NETWORKS=$(git show "$BASE_SHA:config/networks.json" | jq 'keys')
-            else
-              echo "⚠️ No previous networks.json found in base branch. Checking main..."
-              git fetch origin main --depth=1 || true
-              if git show origin/main:config/networks.json > /dev/null 2>&1; then
-                OLD_NETWORKS=$(git show origin/main:config/networks.json | jq 'keys')
-              else
-                echo "❌ Error: Could not find previous networks.json"
-                exit 1
-              fi
-            fi
+          # Compare with base branch (main) to detect new networks
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          git fetch origin "$BASE_SHA" --depth=1 || echo "Could not fetch base SHA"
+          
+          if git show "$BASE_SHA:config/networks.json" > /dev/null 2>&1; then
+            OLD_NETWORKS=$(git show "$BASE_SHA:config/networks.json" | jq 'keys')
           else
-            # Push event - compare with previous commit
-            git fetch origin main --depth=2 || true
-            PREV_COMMIT=$(git rev-parse HEAD~1 2>/dev/null || echo "")
-            
-            if [ -n "$PREV_COMMIT" ] && git show "$PREV_COMMIT:config/networks.json" > /dev/null 2>&1; then
-              OLD_NETWORKS=$(git show "$PREV_COMMIT:config/networks.json" | jq 'keys')
-            elif git show origin/main:config/networks.json > /dev/null 2>&1; then
+            echo "⚠️ No previous networks.json found in base branch. Checking main..."
+            git fetch origin main --depth=1 || true
+            if git show origin/main:config/networks.json > /dev/null 2>&1; then
               OLD_NETWORKS=$(git show origin/main:config/networks.json | jq 'keys')
             else
               echo "❌ Error: Could not find previous networks.json"
@@ -117,32 +88,6 @@ jobs:
           token: ${{ secrets.GIT_ACTIONS_BOT_PAT_CLASSIC }}
           fetch-depth: 0
 
-      - name: Check if PR already exists
-        if: env.SKIP_UPDATE != 'true'
-        id: check-existing-pr
-        env:
-          GITHUB_TOKEN: ${{ secrets.GIT_ACTIONS_BOT_PAT_CLASSIC }}
-        run: |
-          cd target-repo
-          
-          # Check for existing open PRs with our title pattern
-          PR_DATA=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/purriza/louper/pulls?state=open" | \
-            jq -r '.[] | select(.title | startswith("chore: Update viem")) | {number: .number, head: .head.ref} | @json' | head -1)
-          
-          if [ -n "$PR_DATA" ] && [ "$PR_DATA" != "null" ]; then
-            EXISTING_PR=$(echo "$PR_DATA" | jq -r '.number')
-            EXISTING_BRANCH=$(echo "$PR_DATA" | jq -r '.head')
-            echo "Found existing PR: #$EXISTING_PR on branch: $EXISTING_BRANCH"
-            echo "EXISTING_PR_NUMBER=$EXISTING_PR" >> $GITHUB_ENV
-            echo "EXISTING_BRANCH=$EXISTING_BRANCH" >> $GITHUB_ENV
-            echo "PR_EXISTS=true" >> $GITHUB_ENV
-          else
-            echo "No existing PR found"
-            echo "PR_EXISTS=false" >> $GITHUB_ENV
-          fi
-
       - name: Update viem to latest version
         if: env.SKIP_UPDATE != 'true'
         id: update-viem
@@ -183,14 +128,8 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             
-            # Use existing branch if PR exists, otherwise use fixed branch name
-            if [ "${{ env.PR_EXISTS }}" == "true" ] && [ -n "${{ env.EXISTING_BRANCH }}" ]; then
-              BRANCH_NAME="${{ env.EXISTING_BRANCH }}"
-              echo "Reusing existing branch from PR: $BRANCH_NAME"
-            else
-              BRANCH_NAME="chore/update-viem"
-              echo "Using fixed branch name: $BRANCH_NAME"
-            fi
+            # Always use fixed branch name
+            BRANCH_NAME="chore/update-viem"
             echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
             
             # Check if branch already exists remotely
@@ -268,8 +207,8 @@ jobs:
             fi
           fi
 
-      - name: Create Pull Request in target repository
-        if: env.SKIP_UPDATE != 'true' && env.PR_EXISTS != 'true' && env.UPDATE_NEEDED == 'true'
+      - name: Create or Update Pull Request in target repository
+        if: env.SKIP_UPDATE != 'true' && env.UPDATE_NEEDED == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GIT_ACTIONS_BOT_PAT_CLASSIC }}
         run: |
@@ -280,8 +219,14 @@ jobs:
             -H "Accept: application/vnd.github.v3+json" \
             "https://api.github.com/repos/purriza/louper")
           
-          DEFAULT_BRANCH=$(echo "$REPO_INFO" | jq -r '.default_branch // "main"')
+          DEFAULT_BRANCH=$(echo "$REPO_INFO" | jq -r '.default_branch // "dev"')
           echo "Detected default branch: ${DEFAULT_BRANCH}"
+          
+          # Check if PR already exists
+          EXISTING_PR=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/purriza/louper/pulls?state=open&head=purriza:${{ env.BRANCH_NAME }}" | \
+            jq -r '.[0].number // empty')
           
           # Prepare PR body using jq to safely build JSON
           NETWORK_DETAILS=$(echo '${{ env.network_details }}' | jq -r '.[] | "- **\(.name)**: Chain ID \(.chainId)"')
@@ -297,53 +242,42 @@ jobs:
               body: ("This PR updates viem to version \($viem) to ensure new networks added to contracts are available.\n\n## New Networks Detected\n\nThe following networks were added to [contracts repository](https://github.com/\($repo)):\n\n\($networks)\n\n## Changes\n\n- Updated viem from \($current) to \($viem)\n\n## Related\n\n- Source commit: [\($sha)](https://github.com/\($repo)/commit/\($sha))\n\n## Verification\n\nAfter merging this PR, please verify that the new networks are available by checking:\n1. Network selection dropdown includes the new networks\n2. Contract inspection works correctly for contracts deployed on these networks\n\n---\n\n*This PR was automatically created by automated workflow*")
             }' | jq -r '.body')
           
-          # Create PR using GitHub API (more reliable, no additional scopes required)
-          PR_RESPONSE=$(curl -s -X POST \
-            -H "Authorization: token ${GITHUB_TOKEN}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/purriza/louper/pulls" \
-            -d "{
-              \"title\": \"chore: Update viem to ${{ env.LATEST_VIEM }} [TEST]\",
-              \"body\": $(echo "$PR_BODY" | jq -Rs .),
-              \"head\": \"${{ env.BRANCH_NAME }}\",
-              \"base\": \"${DEFAULT_BRANCH}\",
-              \"draft\": true
-            }")
-          
-          PR_URL=$(echo "$PR_RESPONSE" | jq -r '.html_url // empty')
-          PR_NUMBER=$(echo "$PR_RESPONSE" | jq -r '.number // empty')
-          
-          if [ -n "$PR_URL" ] && [ "$PR_URL" != "null" ]; then
-            echo "✅ PR created successfully: $PR_URL"
+          if [ -n "$EXISTING_PR" ] && [ "$EXISTING_PR" != "null" ]; then
+            echo "PR #$EXISTING_PR already exists, updating..."
+            PR_URL=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/purriza/louper/pulls/$EXISTING_PR" | \
+              jq -r '.html_url')
+            echo "✅ PR updated: $PR_URL"
             echo "PR_URL=$PR_URL" >> $GITHUB_ENV
-            echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
+            echo "PR_NUMBER=$EXISTING_PR" >> $GITHUB_ENV
           else
-            echo "❌ Failed to create PR"
-            echo "Response: $PR_RESPONSE"
-            exit 1
+            echo "Creating new PR..."
+            # Create PR using GitHub API
+            PR_RESPONSE=$(curl -s -X POST \
+              -H "Authorization: token ${GITHUB_TOKEN}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/purriza/louper/pulls" \
+              -d "{
+                \"title\": \"chore: Update viem to ${{ env.LATEST_VIEM }}\",
+                \"body\": $(echo "$PR_BODY" | jq -Rs .),
+                \"head\": \"${{ env.BRANCH_NAME }}\",
+                \"base\": \"${DEFAULT_BRANCH}\"
+              }")
+            
+            PR_URL=$(echo "$PR_RESPONSE" | jq -r '.html_url // empty')
+            PR_NUMBER=$(echo "$PR_RESPONSE" | jq -r '.number // empty')
+            
+            if [ -n "$PR_URL" ] && [ "$PR_URL" != "null" ]; then
+              echo "✅ PR created successfully: $PR_URL"
+              echo "PR_URL=$PR_URL" >> $GITHUB_ENV
+              echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
+            else
+              echo "❌ Failed to create PR"
+              echo "Response: $PR_RESPONSE"
+              exit 1
+            fi
           fi
-
-      - name: Comment on existing PR
-        if: env.SKIP_UPDATE != 'true' && env.PR_EXISTS == 'true'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GIT_ACTIONS_BOT_PAT_CLASSIC }}
-        run: |
-          # Add comment to existing PR about new networks using jq
-          NETWORK_DETAILS=$(echo '${{ env.network_details }}' | jq -r '.[] | "- **\(.name)**: Chain ID \(.chainId)"')
-          
-          COMMENT_BODY=$(jq -n \
-            --arg repo "${{ github.repository }}" \
-            --arg sha "${{ github.sha }}" \
-            --arg networks "${NETWORK_DETAILS}" \
-            '{body: ("## New Networks Detected\n\nThe following networks were added to [contracts repository](https://github.com/\($repo)):\n\n\($networks)\n\nThis PR should already include support for these networks once viem is updated.\n\nRelated commit: [\($sha)](https://github.com/\($repo)/commit/\($sha))\n\n---\n\n*This comment was automatically added by automated workflow*")}' | jq -r '.body')
-          
-          curl -s -X POST \
-            -H "Authorization: token ${GITHUB_TOKEN}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/purriza/louper/issues/${{ env.EXISTING_PR_NUMBER }}/comments" \
-            -d "{\"body\": $(echo "$COMMENT_BODY" | jq -Rs .)}"
-          
-          echo "✅ Comment added to existing PR #${{ env.EXISTING_PR_NUMBER }}"
 
       - name: Summary
         if: always()
@@ -352,10 +286,8 @@ jobs:
           echo ""
           if [ "${{ env.SKIP_UPDATE }}" == "true" ]; then
             echo "✅ No new networks detected. Skipped update."
-          elif [ "${{ env.PR_EXISTS }}" == "true" ]; then
-            echo "✅ Found existing PR #${{ env.EXISTING_PR_NUMBER }}. Added comment with new network details."
           elif [ "${{ env.UPDATE_NEEDED }}" == "true" ]; then
-            echo "✅ Created PR in target repository to update viem to ${{ env.LATEST_VIEM }}"
+            echo "✅ Updated viem to ${{ env.LATEST_VIEM }} and created/updated PR in target repository"
             echo "PR: ${{ env.PR_URL }}"
           else
             echo "✅ viem is already at latest version. No update needed."
