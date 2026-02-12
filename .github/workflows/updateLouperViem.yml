@@ -169,14 +169,24 @@ jobs:
             fi
             
             # Install dependencies to update lock file
+            # Use --force to bypass peer dependency conflicts (TypeScript version)
             if [ -f "package-lock.json" ]; then
-              npm install --legacy-peer-deps
+              npm install --force || {
+                echo "❌ Error: npm install failed"
+                exit 1
+              }
             elif [ -f "pnpm-lock.yaml" ]; then
               npm install -g pnpm
-              pnpm install
+              pnpm install --force || {
+                echo "❌ Error: pnpm install failed"
+                exit 1
+              }
             elif [ -f "yarn.lock" ]; then
               npm install -g yarn
-              yarn install
+              yarn install --force || {
+                echo "❌ Error: yarn install failed"
+                exit 1
+              }
             fi
             
             # Verify update
