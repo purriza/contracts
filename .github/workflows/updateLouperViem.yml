@@ -170,13 +170,22 @@ jobs:
             
             # Install dependencies to update lock file
             if [ -f "package-lock.json" ]; then
-              npm install --legacy-peer-deps
+              npm install --legacy-peer-deps || {
+                echo "❌ Error: npm install failed"
+                exit 1
+              }
             elif [ -f "pnpm-lock.yaml" ]; then
               npm install -g pnpm
-              pnpm install
+              pnpm install || {
+                echo "❌ Error: pnpm install failed"
+                exit 1
+              }
             elif [ -f "yarn.lock" ]; then
               npm install -g yarn
-              yarn install
+              yarn install || {
+                echo "❌ Error: yarn install failed"
+                exit 1
+              }
             fi
             
             # Verify update
