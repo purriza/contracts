@@ -207,7 +207,7 @@ jobs:
                ([ ! -f "package-lock.json" ] || git diff --quiet package-lock.json) && \
                ([ ! -f "pnpm-lock.yaml" ] || git diff --quiet pnpm-lock.yaml) && \
                ([ ! -f "yarn.lock" ] || git diff --quiet yarn.lock); then
-              echo "⚠️ No changes detected after update. Skipping commit."
+              echo "⚠️ No changes detected after update. Skipping commit and push."
               echo "UPDATE_NEEDED=false" >> $GITHUB_ENV
             else
               # Commit changes (add all lock files that exist)
@@ -222,15 +222,8 @@ jobs:
                 -m "New networks detected:" \
                 -m "$(echo '${{ env.added_networks }}' | jq -r '.[]' | sed 's/^/- /')" \
                 -m "Related commit: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}"
-            fi
-            
-            # Push branch only if there were changes
-            if git diff --quiet HEAD package.json 2>/dev/null && \
-               ([ ! -f "package-lock.json" ] || git diff --quiet HEAD package-lock.json 2>/dev/null) && \
-               ([ ! -f "pnpm-lock.yaml" ] || git diff --quiet HEAD pnpm-lock.yaml 2>/dev/null) && \
-               ([ ! -f "yarn.lock" ] || git diff --quiet HEAD yarn.lock 2>/dev/null); then
-              echo "No changes to push, skipping..."
-            else
+              
+              # Push branch after successful commit
               if git ls-remote --heads origin "$BRANCH_NAME" | grep -q "$BRANCH_NAME"; then
                 echo "Branch exists remotely, using force push to update..."
                 git push --force origin "$BRANCH_NAME" || {
