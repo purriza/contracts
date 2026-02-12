@@ -226,8 +226,6 @@ jobs:
                   exit 1
                 }
               fi
-            else
-              echo "No changes to push, skipping..."
             fi
           fi
 
