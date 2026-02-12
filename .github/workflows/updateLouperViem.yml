@@ -130,8 +130,8 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             
-            # Always use fixed branch name
-            BRANCH_NAME="chore/update-viem"
+            # Use branch name with viem version
+            BRANCH_NAME="chore/update-viem-${LATEST_VIEM}"
             echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
             
             # Check if branch already exists remotely
