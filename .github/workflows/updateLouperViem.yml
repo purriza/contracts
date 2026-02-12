@@ -130,8 +130,8 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             
-            # Always use fixed branch name
-            BRANCH_NAME="chore/update-viem"
+            # Use branch name with viem version
+            BRANCH_NAME="chore/update-viem-${LATEST_VIEM}"
             echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
             
             # Check if branch already exists remotely
@@ -148,16 +148,24 @@ jobs:
               git checkout -b "$BRANCH_NAME" "origin/${DEFAULT_BRANCH}"
             fi
             
-            # Check if viem exists in package.json
+            # Check if viem exists in package.json and update/add it directly
             VIEM_EXISTS=$(jq -r '.dependencies.viem // .devDependencies.viem // empty' package.json)
             
             if [ -z "$VIEM_EXISTS" ] || [ "$VIEM_EXISTS" == "null" ]; then
-              echo "viem not found in package.json, adding it..."
-              npm install viem@${LATEST_VIEM} --save-exact
+              echo "viem not found in package.json, adding it to devDependencies..."
+              # Add viem to devDependencies using jq
+              jq ".devDependencies.viem = \"${LATEST_VIEM}\"" package.json > package.json.tmp && mv package.json.tmp package.json
             else
-              echo "viem found in package.json (version: $VIEM_EXISTS), updating..."
-              # Update viem using npm install (more reliable than npm-check-updates)
-              npm install viem@${LATEST_VIEM} --save-exact
+              echo "viem found in package.json (version: $VIEM_EXISTS), updating to ${LATEST_VIEM}..."
+              # Update viem version using jq (check both dependencies and devDependencies)
+              if jq -e '.dependencies.viem' package.json > /dev/null 2>&1; then
+                jq ".dependencies.viem = \"${LATEST_VIEM}\"" package.json > package.json.tmp && mv package.json.tmp package.json
+              elif jq -e '.devDependencies.viem' package.json > /dev/null 2>&1; then
+                jq ".devDependencies.viem = \"${LATEST_VIEM}\"" package.json > package.json.tmp && mv package.json.tmp package.json
+              else
+                # Fallback: add to devDependencies
+                jq ".devDependencies.viem = \"${LATEST_VIEM}\"" package.json > package.json.tmp && mv package.json.tmp package.json
+              fi
             fi
             
             # Install dependencies to update lock file
