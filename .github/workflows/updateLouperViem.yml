@@ -21,8 +21,10 @@ permissions:
 jobs:
   update-louper-viem:
     runs-on: ubuntu-latest
-    # Only run when PR is merged (closed + merged == true)
-    if: github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch'
+    # Only run when PR is merged to main branch
+    if: |
+      (github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main') ||
+      github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Checkout repository
