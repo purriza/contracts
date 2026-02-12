@@ -148,17 +148,16 @@ jobs:
               git checkout -b "$BRANCH_NAME" "origin/${DEFAULT_BRANCH}"
             fi
             
-            # Update viem using npm-check-updates or npm install
-            # Try npm-check-updates first, fallback to manual update
-            if command -v npx &> /dev/null; then
-              echo "Using npm-check-updates to update viem..."
-              npx -y npm-check-updates -u viem || {
-                echo "npm-check-updates failed, trying manual update..."
-                npm install viem@latest --save-exact
-              }
+            # Check if viem exists in package.json
+            VIEM_EXISTS=$(jq -r '.dependencies.viem // .devDependencies.viem // empty' package.json)
+            
+            if [ -z "$VIEM_EXISTS" ] || [ "$VIEM_EXISTS" == "null" ]; then
+              echo "viem not found in package.json, adding it..."
+              npm install viem@${LATEST_VIEM} --save-exact
             else
-              echo "Using npm install to update viem..."
-              npm install viem@latest --save-exact
+              echo "viem found in package.json (version: $VIEM_EXISTS), updating..."
+              # Update viem using npm install (more reliable than npm-check-updates)
+              npm install viem@${LATEST_VIEM} --save-exact
             fi
             
             # Install dependencies to update lock file
@@ -173,39 +172,62 @@ jobs:
             fi
             
             # Verify update
-            UPDATED_VIEM=$(jq -r '.dependencies.viem // .devDependencies.viem' package.json)
+            UPDATED_VIEM=$(jq -r '.dependencies.viem // .devDependencies.viem // empty' package.json)
             echo "Updated viem version: $UPDATED_VIEM"
+            
+            if [ -z "$UPDATED_VIEM" ] || [ "$UPDATED_VIEM" == "null" ]; then
+              echo "❌ Error: Failed to update viem in package.json"
+              exit 1
+            fi
             
             if [ "$UPDATED_VIEM" != "$LATEST_VIEM" ]; then
               echo "⚠️ Warning: Version mismatch. Expected $LATEST_VIEM, got $UPDATED_VIEM"
             fi
             
-            # Commit changes (add all lock files that exist)
-            git add package.json
-            [ -f "package-lock.json" ] && git add package-lock.json || true
-            [ -f "pnpm-lock.yaml" ] && git add pnpm-lock.yaml || true
-            [ -f "yarn.lock" ] && git add yarn.lock || true
-            
-            # Create commit message with HEREDOC
-            git commit -m "chore: Update viem to ${LATEST_VIEM}" \
-              -m "This update ensures new networks added to contracts are available." \
-              -m "New networks detected:" \
-              -m "$(echo '${{ env.added_networks }}' | jq -r '.[]' | sed 's/^/- /')" \
-              -m "Related commit: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}"
-            
-            # Push branch (use force if updating existing branch)
-            if git ls-remote --heads origin "$BRANCH_NAME" | grep -q "$BRANCH_NAME"; then
-              echo "Branch exists remotely, using force push to update..."
-              git push --force origin "$BRANCH_NAME" || {
-                echo "❌ Failed to force push branch"
-                exit 1
-              }
+            # Check if there are actual changes to commit
+            if git diff --quiet package.json && \
+               ([ ! -f "package-lock.json" ] || git diff --quiet package-lock.json) && \
+               ([ ! -f "pnpm-lock.yaml" ] || git diff --quiet pnpm-lock.yaml) && \
+               ([ ! -f "yarn.lock" ] || git diff --quiet yarn.lock); then
+              echo "⚠️ No changes detected after update. Skipping commit."
+              echo "UPDATE_NEEDED=false" >> $GITHUB_ENV
             else
-              echo "Pushing new branch..."
-              git push origin "$BRANCH_NAME" || {
-                echo "❌ Failed to push branch"
-                exit 1
-              }
+              # Commit changes (add all lock files that exist)
+              git add package.json
+              [ -f "package-lock.json" ] && git add package-lock.json || true
+              [ -f "pnpm-lock.yaml" ] && git add pnpm-lock.yaml || true
+              [ -f "yarn.lock" ] && git add yarn.lock || true
+              
+              # Create commit message with HEREDOC
+              git commit -m "chore: Update viem to ${LATEST_VIEM}" \
+                -m "This update ensures new networks added to contracts are available." \
+                -m "New networks detected:" \
+                -m "$(echo '${{ env.added_networks }}' | jq -r '.[]' | sed 's/^/- /')" \
+                -m "Related commit: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}"
+            fi
+            
+            # Push branch only if there were changes
+            if git diff --quiet HEAD package.json 2>/dev/null && \
+               ([ ! -f "package-lock.json" ] || git diff --quiet HEAD package-lock.json 2>/dev/null) && \
+               ([ ! -f "pnpm-lock.yaml" ] || git diff --quiet HEAD pnpm-lock.yaml 2>/dev/null) && \
+               ([ ! -f "yarn.lock" ] || git diff --quiet HEAD yarn.lock 2>/dev/null); then
+              echo "No changes to push, skipping..."
+            else
+              if git ls-remote --heads origin "$BRANCH_NAME" | grep -q "$BRANCH_NAME"; then
+                echo "Branch exists remotely, using force push to update..."
+                git push --force origin "$BRANCH_NAME" || {
+                  echo "❌ Failed to force push branch"
+                  exit 1
+                }
+              else
+                echo "Pushing new branch..."
+                git push origin "$BRANCH_NAME" || {
+                  echo "❌ Failed to push branch"
+                  exit 1
+                }
+              fi
+            else
+              echo "No changes to push, skipping..."
             fi
           fi
 
